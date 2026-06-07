@@ -1,104 +1,86 @@
 """
 api/main.py
-
-FastAPI REST layer for the RAG pipeline.
-
-Endpoints:
-    GET  /health        — liveness check
-    POST /ingest        — ingest a directory of documents
-    POST /query         — ask a question, get cited answer
-
-Run with:
-    uvicorn api.main:app --reload
 """
+import os
+import shutil
+import uuid
 import logging
-from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from src.pipeline import AskMyDocsPipeline
+from src.utils.validators import validate_file, FileValidationError
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ── Pipeline singleton ────────────────────────────────────────────
+app = FastAPI(title="AskMyDocs API", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 pipeline = AskMyDocsPipeline()
 
 
-# ── Lifespan (startup/shutdown) ───────────────────────────────────
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("RAG API starting up")
-    yield
-    logger.info("RAG API shutting down")
-
-
-# ── App ───────────────────────────────────────────────────────────
-app = FastAPI(
-    title="RAG Embedder API",
-    description="Ask questions against your ingested documents.",
-    version="0.1.0",
-    lifespan=lifespan,
-)
-
-
-# ── Request / Response models ─────────────────────────────────────
-class IngestRequest(BaseModel):
-    directory: str = "docs/"
-
-
-class IngestResponse(BaseModel):
-    message: str
-    chunks_ingested: int
-
-
 class QueryRequest(BaseModel):
+    session_id: str
     question: str
 
 
-class QueryResponse(BaseModel):
-    answer: str
-    sources: list
-
-
-# ── Endpoints ─────────────────────────────────────────────────────
 @app.get("/health")
 def health():
-    """Liveness check — returns ok if the API is running."""
-    return {"status": "ok"}
+    return {"status": "ok", "version": "1.0.0"}
 
 
-@app.post("/ingest", response_model=IngestResponse)
-def ingest(request: IngestRequest):
-    """
-    Ingest all documents from a directory into the vector store.
-    Call this once before querying.
-    """
+@app.post("/upload")
+async def upload_document(file: UploadFile = File(...)):
+    content = await file.read()
+
     try:
-        count = pipeline.ingest(request.directory)
-        return IngestResponse(
-            message=f"Ingested documents from '{request.directory}'",
-            chunks_ingested=count,
-        )
-    except Exception as e:
-        logger.error("Ingest failed: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        validate_file(file.filename, len(content))
+    except FileValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
+    session_id = str(uuid.uuid4())
+    tmp_dir = f"/tmp/rag_sessions/{session_id}"
+    os.makedirs(tmp_dir, exist_ok=True)
+    tmp_path = f"{tmp_dir}/{file.filename}"
 
-@app.post("/query", response_model=QueryResponse)
-def query(request: QueryRequest):
-    """
-    Ask a question. Returns a cited answer and source list.
-    You must call /ingest before calling /query.
-    """
-    if not request.question.strip():
-        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+    with open(tmp_path, "wb") as f:
+        f.write(content)
+
     try:
-        result = pipeline.ask(request.question)
-        return QueryResponse(
-            answer=result["answer"],
-            sources=result["sources"],
-        )
+        chunk_count = pipeline.ingest(tmp_dir, session_id=session_id)
     except Exception as e:
-        logger.error("Query failed: %s", e)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    return {
+        "session_id": session_id,
+        "filename": file.filename,
+        "chunks": chunk_count,
+        "status": "ready"
+    }
+
+
+@app.post("/query")
+async def query_document(request: QueryRequest):
+    try:
+        result = pipeline.ask(request.question, session_id=request.session_id)
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    return result
+
+
+@app.delete("/sessions/{session_id}")
+async def delete_session(session_id: str):
+    pipeline.chroma_store.delete_session(session_id)
+    return {"deleted": session_id}
