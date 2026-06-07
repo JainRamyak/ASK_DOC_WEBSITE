@@ -11,21 +11,25 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+STORE_PATH = "outputs/store"
+
 class AskMyDocsPipeline:
     def __init__(self):
         self.embedder   = get_embedder()
         self.vec_store  = FAISSVectorStore(self.embedder.dimension)
         self.bm25_store = BM25Store()
         self.reranker   = Reranker()
+        self.vec_store.load(STORE_PATH)
+        self.bm25_store.load(STORE_PATH)
 
-    def ingest(self, directory: str, save_path="outputs/store") -> int:
+    def ingest(self, directory: str) -> int:
         docs   = load_documents(directory)
         chunks = chunk_documents(docs)
         vecs   = self.embedder.embed_batch([c["text"] for c in chunks])
         self.vec_store.add(chunks, vecs)
         self.bm25_store.add(chunks)
-        self.vec_store.save(save_path)
-        self.bm25_store.save(save_path)
+        self.vec_store.save(STORE_PATH)
+        self.bm25_store.save(STORE_PATH)
         logger.info("Ingested %d chunks from %s", len(chunks), directory)
         return len(chunks)
 

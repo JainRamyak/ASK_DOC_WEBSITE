@@ -106,12 +106,13 @@ def _answer_gemini(question: str, context: str, chunks: List[dict]) -> dict:
 
 
 def _answer_mistral(question: str, context: str, chunks: List[dict]) -> dict:
-    """Call Mistral Small via mistralai SDK v2 (free tier available)."""
     try:
         from mistralai import Mistral
-    except ImportError:
-        raise ImportError("Run: pip install mistralai")
-
+    except (ImportError, Exception):
+        raise RuntimeError(
+            "mistralai is not compatible with Python 3.14. "
+            "Use LLM_PROVIDER=gemini in .env instead."
+        )
     if not settings.mistral_api_key:
         raise EnvironmentError(
             "MISTRAL_API_KEY is not set in .env. "
