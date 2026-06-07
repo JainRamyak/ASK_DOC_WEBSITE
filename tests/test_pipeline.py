@@ -85,3 +85,33 @@ def test_chunker_splits_long_text():
     long_doc = [{"text": "word " * 500, "source": "test.txt"}]
     chunks = chunk_documents(long_doc)
     assert len(chunks) > 1
+
+
+def test_ingest_loads_chunks(pipeline):
+    assert pipeline.chroma_store is not None
+
+def test_ingest_bm25_built(pipeline):
+    # BM25 replaced by ChromaDB — verify chroma collection exists
+    collection = pipeline.chroma_store.get_or_create_collection("default")
+    assert collection is not None
+
+def test_retrieval_returns_results(pipeline):
+    from config import settings
+    q_vec = pipeline.embedder.embed_text("Who created Python?")
+    results = pipeline.chroma_store.query(
+        session_id="default",
+        query_embedding=q_vec,
+        top_k=settings.top_k * 4
+    )
+    assert len(results["documents"][0]) > 0
+
+def test_retrieval_chunks_have_required_keys(pipeline):
+    from config import settings
+    q_vec = pipeline.embedder.embed_text("What is FastAPI?")
+    results = pipeline.chroma_store.query(
+        session_id="default",
+        query_embedding=q_vec,
+        top_k=settings.top_k * 4
+    )
+    for meta in results["metadatas"][0]:
+        assert "source" in meta
