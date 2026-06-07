@@ -1,0 +1,40 @@
+# AskMyDocs — Production requirements
+# Lean install: only what the app actually imports at runtime
+# Dev tools (jupyter, matplotlib, cuda, etc.) excluded
+
+# ── Web framework ──────────────────────────────────────────────
+fastapi==0.136.1
+uvicorn[standard]==0.46.0
+python-multipart           # required for FastAPI file uploads
+starlette==1.0.0
+
+# ── Config & validation ────────────────────────────────────────
+pydantic==2.12.5
+python-dotenv==1.0.1
+
+# ── Embeddings & ML ────────────────────────────────────────────
+sentence-transformers==2.7.0
+torch==2.11.0
+transformers==4.57.6
+tokenizers==0.22.2
+
+# ── Vector store ───────────────────────────────────────────────
+chromadb==0.6.3
+
+# ── Retrieval ──────────────────────────────────────────────────
+faiss-cpu==1.13.2
+rank-bm25==0.2.2
+
+# ── Document ingestion ─────────────────────────────────────────
+langchain-text-splitters==1.1.1
+PyMuPDF==1.27.2.2           # PDF loading
+python-docx==1.1.2          # DOCX loading
+
+# ── LLM providers (all optional at runtime via LLM_PROVIDER env) ─
+google-genai==1.73.1        # LLM_PROVIDER=gemini (default)
+anthropic==0.94.1           # LLM_PROVIDER=anthropic
+openai==2.32.0              # LLM_PROVIDER=openai
+mistralai==2.4.2            # LLM_PROVIDER=mistral
+
+# ── Numerics ───────────────────────────────────────────────────
+numpy==2.4.4

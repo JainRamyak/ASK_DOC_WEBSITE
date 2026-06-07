@@ -18,11 +18,23 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AskMyDocs API", version="1.0.0")
 
+# ── CORS ────────────────────────────────────────────────────────
+# In production, set ALLOWED_ORIGINS to your Vercel URL, e.g.:
+#   ALLOWED_ORIGINS=https://your-app.vercel.app
+# Comma-separate multiple origins. Leave unset for dev (allows all).
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+allowed_origins: list[str] = (
+    [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    if _raw_origins.strip()
+    else ["*"]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=allowed_origins,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    allow_credentials=False,
 )
 
 pipeline = AskMyDocsPipeline()

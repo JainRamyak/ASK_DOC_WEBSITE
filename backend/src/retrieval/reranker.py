@@ -14,6 +14,7 @@ class Reranker:
         scores = self.model.predict(pairs)
         ranked = sorted(zip(chunks, scores),
                         key=lambda x: -x[1])
-        top = [c for c, _ in ranked[:top_n]]
+        # Attach the reranker score to each chunk so citations show real relevance
+        top = [{**c, "score": float(score)} for c, score in ranked[:top_n]]
         logger.info("Reranked %d -> %d chunks", len(chunks), len(top))
         return top
