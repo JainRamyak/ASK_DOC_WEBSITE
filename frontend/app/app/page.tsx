@@ -56,6 +56,9 @@ export default function AppPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, asking]);
+  useEffect(() => {
+  fetch(`${process.env.NEXT_PUBLIC_API_URL}/health`).catch(() => {});
+}, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {

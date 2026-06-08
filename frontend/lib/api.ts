@@ -20,22 +20,43 @@ export async function healthCheck(): Promise<boolean> {
   }
 }
 
+// export async function uploadDocument(file: File): Promise<{
+//   session_id: string;
+//   filename: string;
+//   chunks: number;
+// }> {
+//   const form = new FormData();
+//   form.append("file", file);
+//   const res = await fetch(`${getApiBase()}/upload`, {
+//     method: "POST",
+//     body: form,
+//   });
+//   if (!res.ok) {
+//     const detail = await res.text();
+//     throw new Error(detail || `Upload failed (HTTP ${res.status})`);
+//   }
+//   return res.json();
+// }
 export async function uploadDocument(file: File): Promise<{
-  session_id: string;
-  filename: string;
-  chunks: number;
+  session_id: string; filename: string; chunks: number;
 }> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${getApiBase()}/upload`, {
-    method: "POST",
-    body: form,
-  });
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(detail || `Upload failed (HTTP ${res.status})`);
+  
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout
+  
+  try {
+    const res = await fetch(`${getApiBase()}/upload`, {
+      method: "POST",
+      body: form,
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  } finally {
+    clearTimeout(timeout);
   }
-  return res.json();
 }
 
 export async function askQuestion(
