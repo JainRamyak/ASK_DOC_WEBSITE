@@ -1,0 +1,40 @@
+# One-command local dev: docker compose up
+# Backend on :8000, frontend on :3000, Chroma data persisted in a
+# named volume so it survives `docker compose down` (but not
+# `docker compose down -v`).
+#
+# You still need a .env in backend/ and a .env.local in frontend/
+# (copy from the .example files) — this does not manage secrets for
+# you, on purpose.
+
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - chroma-data:/app/outputs/chroma
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  chroma-data:

@@ -1,0 +1,25 @@
+What's New In Python 3.12
+
+Python 3.12 was released on October 2, 2023. Major new features include:
+
+PEP 695 - Type Parameter Syntax: A new, more compact way to create generic classes and functions. You can now write `def max[T](args: Iterable[T]) -> T: ...` instead of using TypeVar.
+
+PEP 696 - Type Parameter Defaults: TypeVar, ParamSpec, and TypeVarTuple can now have default values, e.g. `type Vector[T = int] = list[T]`.
+
+PEP 698 - Override Decorator: The `@override` decorator from `typing` explicitly marks a method as overriding a base class method, enabling static type checkers to catch mistakes.
+
+PEP 684 - Per-Interpreter GIL: Each sub-interpreter now has its own Global Interpreter Lock. This enables true parallelism across sub-interpreters in the same process.
+
+PEP 669 - Low Impact Monitoring: A new `sys.monitoring` namespace provides a low-overhead way for debuggers, profilers, and coverage tools to instrument code at the bytecode level.
+
+Improved Error Messages: Python 3.12 continues the trend of more helpful error messages. For example, when you use `import` to import a module attribute that doesn't exist, the error message now suggests the correct form: `from module import name`.
+
+F-string Improvements (PEP 701): F-strings can now contain any valid Python expression, including nested f-strings, multiline expressions, and backslashes inside the expression part.
+
+Distutils Removal: The long-deprecated `distutils` package has been removed from the standard library. Use `setuptools` instead.
+
+The `pathlib.Path` class now supports subclassing. `os.path.isabs()` now handles non-string arguments properly.
+
+Asyncio improvements: The `asyncio.TaskGroup` context manager (introduced in 3.11) gained better cancellation semantics. The `asyncio.timeout()` context manager is now available.
+
+Performance improvements: Python 3.12 is approximately 5% faster than Python 3.11 on the pyperformance benchmark suite, due to optimizations to the specializing adaptive interpreter (PEP 659) and improvements to the LOAD_ATTR and LOAD_GLOBAL bytecodes.

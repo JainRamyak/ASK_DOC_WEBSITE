@@ -1,0 +1,57 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploy: Render dashboard → New → Blueprint → point at this repo.
+#
+# IMPORTANT — free tier persistence caveat:
+# Render's FREE web services do not support attached persistent disks.
+# That means `disk:` below only takes effect on a paid plan. On the
+# free plan, ChromaDB's on-disk data is wiped every time the service
+# restarts or redeploys. See ARCHITECTURE.md "Storage & hosting
+# trade-offs" for the two ways to actually fix this for free
+# (Chroma Cloud / Qdrant Cloud free tier) if that matters for your use case.
+#
+# IMPORTANT — free tier RAM caveat:
+# EMBEDDER_TYPE is `gemini` below, not `local`, DELIBERATELY. Render's
+# free tier is ~512MB RAM; torch + sentence-transformers risk not
+# fitting there at all once FastAPI + ChromaDB + the reranker are also
+# loaded. `local` is fine and free on your own machine for development
+# (see backend/.env.example) — don't flip this to `local` in production
+# without upgrading the Render plan first. The reranker still loads a
+# local model regardless of this setting — that's the more likely OOM
+# culprit if you see one; see ARCHITECTURE.md.
+services:
+  - type: web
+    name: askmydocs-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: EMBEDDER_TYPE
+        value: gemini   # NOT local — see RAM caveat above
+      - key: GEMINI_API_KEY
+        sync: false   # set manually in the Render dashboard, never in git
+      - key: ALLOWED_ORIGINS
+        value: https://your-app.vercel.app   # replace after your Vercel deploy
+      - key: CHROMA_PERSIST_DIR
+        value: /var/data/chroma
+      - key: SESSION_TTL_HOURS
+        value: "24"
+      - key: RATE_LIMIT_REQUESTS
+        value: "20"
+      - key: RATE_LIMIT_WINDOW_SECONDS
+        value: "60"
+      - key: MAX_QUESTION_LENGTH
+        value: "2000"
+      - key: URL_ALLOWED_DOMAINS
+        value: ""   # empty = any public URL allowed (still SSRF-guarded either way)
+      - key: ENABLE_QUERY_REWRITING
+        value: "false"
+      - key: ENABLE_OCR
+        value: "false"   # tesseract-ocr IS in the image either way — this is a pure toggle
+    disk:
+      name: chroma-data
+      mountPath: /var/data
+      sizeGB: 1   # paid plans only — see caveat above

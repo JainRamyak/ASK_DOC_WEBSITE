@@ -1,0 +1,29 @@
+name: backend-tests
+
+on:
+  push:
+    paths: ["backend/**"]
+  pull_request:
+    paths: ["backend/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Run tests that don't need an LLM key
+        run: pytest tests/test_embedder.py tests/test_web_loader.py -v
+      # Full pipeline tests call the configured LLM provider and need a
+      # real key, so they're not run in CI by default. Add a repo secret
+      # (e.g. GEMINI_API_KEY) and uncomment below if you want full coverage.
+      # - run: pytest tests/test_pipeline.py -v
+      #   env:
+      #     LLM_PROVIDER: gemini
+      #     GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

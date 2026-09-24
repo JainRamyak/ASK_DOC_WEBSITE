@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+:root {
+  /* Ink & paper: the whole product is "highlight the right passage in
+     your notes", so the palette is literally a page and a highlighter,
+     not a generic SaaS gradient. */
+  --color-ink: #0d0d0f;        /* page background */
+  --color-ink-raised: #17171a; /* cards on the ink bg */
+  --color-paper: #f4efe3;      /* the "document" surface — answers live here */
+  --color-paper-line: #e2d9c4; /* rule lines on paper */
+  --color-highlight: #f2c14e;  /* the highlighter accent */
+  --color-highlight-dim: #7a6323;
+  --color-ink-text: #e9e6dd;   /* body text on dark bg */
+  --color-ink-muted: #9a978d;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: var(--color-highlight);
+  color: #1a1a1a;
+}
+
+.font-display {
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+}
+
+.font-mono-tight {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* The signature element: citation markers rendered as an actual
+   highlighter stroke rather than plain bracketed text. */
+.citation-mark {
+  background: linear-gradient(120deg, var(--color-highlight) 0%, var(--color-highlight) 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 40%;
+  background-position: 0 70%;
+  padding: 0 0.15em;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.markdown-body p {
+  margin-bottom: 0.75em;
+}
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+.markdown-body code {
+  background: rgba(0, 0, 0, 0.08);
+  padding: 0.1em 0.35em;
+  border-radius: 0.25em;
+  font-size: 0.9em;
+}
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,26 @@
+ChromaDB Developer Guide
+
+ChromaDB is an AI-native open-source vector database designed to make it easy to build LLM applications. It stores embeddings along with their documents and metadata, enabling semantic search.
+
+Installation: pip install chromadb
+
+Basic Usage:
+  import chromadb
+  client = chromadb.Client()
+  collection = client.create_collection("my_collection")
+  collection.add(documents=["doc1", "doc2"], embeddings=[[1.0, 0.5], [0.2, 0.8]], ids=["id1", "id2"])
+  results = collection.query(query_embeddings=[[1.0, 0.5]], n_results=2)
+
+Persistent Storage: Use chromadb.PersistentClient(path="./chroma_db") to persist data to disk across restarts.
+
+Collections: A collection is the core abstraction — each collection has its own embedding space and distance metric. The supported distance metrics are cosine (default), L2 (Euclidean), and inner product (IP).
+
+Metadata Filtering: ChromaDB supports filtering results by metadata. Pass a `where` clause to query(): collection.query(query_embeddings=..., where={"category": "science"}).
+
+Embeddings: ChromaDB can use its built-in embedding functions (OpenAI, Cohere, HuggingFace, etc.) or you can supply your own pre-computed embeddings.
+
+Multi-tenancy: Each ChromaDB client can manage multiple collections. For strict isolation between tenants, use separate collections per tenant and never mix their IDs.
+
+Telemetry: By default ChromaDB sends anonymous usage data to Posthog. Disable with Settings(anonymized_telemetry=False).
+
+HNSW Index: ChromaDB uses the HNSW (Hierarchical Navigable Small World) algorithm for approximate nearest neighbor search. The hnsw:space metadata parameter controls the distance function.
