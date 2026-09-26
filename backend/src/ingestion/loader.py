@@ -17,12 +17,33 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+# Why a supported file contributed no text (see LoadedDocuments.skipped).
+UNREADABLE = "unreadable"  # could not be opened/parsed
+NO_TEXT = "no_text"        # read fine, but nothing extractable
 
-def load_documents(directory: str) -> List[dict]:
+
+class _UnreadableFile(Exception):
+    """A supported file that could not be opened or parsed."""
+
+
+class LoadedDocuments(list):
+    """The list of document dicts `load_documents` has always returned,
+    plus `.skipped`: {on-disk filename: UNREADABLE | NO_TEXT} for every
+    supported file that produced no text. It is a plain list for every
+    existing caller; the extra attribute lets /upload report truthfully
+    without changing `load_documents`'s signature or return type."""
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.skipped: dict = {}
+
+
+def load_documents(directory: str) -> LoadedDocuments:
     """Load every supported file in `directory` (recursively) into
-    a flat list of {"text": ..., "source": ...} dicts, one per page
-    (for PDFs) or per file (for everything else)."""
-    docs: List[dict] = []
+    a flat list of {"text": ..., "source": ..., "file": ...} dicts, one
+    per page (for PDFs) or per file (for everything else). `file` is the
+    on-disk filename the text came from."""
+    docs = LoadedDocuments()
     path = Path(directory)
 
     for filepath in sorted(path.rglob("*")):
@@ -31,13 +52,28 @@ def load_documents(directory: str) -> List[dict]:
 
         suffix = filepath.suffix.lower()
         if suffix == ".pdf":
-            docs.extend(_load_pdf(filepath))
+            loader = _load_pdf
         elif suffix in (".txt", ".md"):
-            docs.extend(_load_text(filepath))
+            loader = _load_text
         elif suffix == ".docx":
-            docs.extend(_load_docx(filepath))
+            loader = _load_docx
         else:
             logger.debug("Skipping unsupported file: %s", filepath.name)
+            continue
+
+        try:
+            file_docs = loader(filepath)
+        except _UnreadableFile:
+            docs.skipped[filepath.name] = UNREADABLE
+            continue
+
+        if not file_docs:
+            docs.skipped[filepath.name] = NO_TEXT
+            continue
+
+        for d in file_docs:
+            d["file"] = filepath.name
+        docs.extend(file_docs)
 
     logger.info("Loaded %d page(s)/section(s) from %s", len(docs), directory)
     return docs
@@ -51,7 +87,7 @@ def _load_text(filepath: Path) -> List[dict]:
         return [{"text": text, "source": filepath.name}]
     except Exception as e:
         logger.warning("Failed to load %s: %s", filepath, e)
-        return []
+        raise _UnreadableFile(filepath.name) from e
 
 
 def _load_docx(filepath: Path) -> List[dict]:
@@ -68,7 +104,7 @@ def _load_docx(filepath: Path) -> List[dict]:
         return [{"text": text, "source": filepath.name}]
     except Exception as e:
         logger.warning("Failed to load DOCX %s: %s", filepath, e)
-        return []
+        raise _UnreadableFile(filepath.name) from e
 
 
 def _load_pdf(filepath: Path) -> List[dict]:
@@ -101,6 +137,10 @@ def _load_pdf(filepath: Path) -> List[dict]:
         )
     except Exception as e:
         logger.warning("Failed to load PDF %s: %s", filepath, e)
+        # Keep pages already extracted; only a file that yielded nothing
+        # before failing counts as unreadable.
+        if not docs:
+            raise _UnreadableFile(filepath.name) from e
     return docs
 
 

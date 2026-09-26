@@ -18,6 +18,7 @@ from starlette.concurrency import run_in_threadpool
 
 from config import settings
 from logger import setup_logging
+from src.ingestion.loader import NO_TEXT, UNREADABLE
 from src.ingestion.web_loader import URLValidationError
 from src.pipeline import AskMyDocsPipeline
 from src.utils.rate_limit import InMemoryRateLimiter
@@ -87,6 +88,17 @@ def _validate_client_session_id(session_id: str) -> None:
         raise HTTPException(status_code=400, detail="Invalid session_id.")
 
 
+# User-facing reasons a file was skipped, keyed by loader reason code.
+# Fixed strings on purpose: never exception text, paths or staging names.
+SKIP_MESSAGES = {
+    UNREADABLE: "Couldn't be read — the file may be corrupt or not a valid document.",
+    NO_TEXT: (
+        "No text could be extracted — it may be empty, made of scanned "
+        "images, or contain only tables."
+    ),
+}
+
+
 class QueryRequest(BaseModel):
     session_id: str
     question: str
@@ -136,8 +148,9 @@ async def upload_documents(
     tmp_dir = f"/tmp/rag_sessions/{uuid.uuid4().hex}"
     os.makedirs(tmp_dir, exist_ok=True)
 
-    saved_filenames = []
+    staged = []  # (original filename, on-disk name), in upload order
     seen_names: dict = {}
+    used_disk_names: set = set()
     try:
         for file in files:
             content = await file.read()
@@ -152,13 +165,20 @@ async def upload_documents(
             # out path traversal above — this only handles same-name
             # collisions within one batch, nothing path-related.
             disk_name = disambiguate_filename(file.filename, seen_names)
+            # A later file literally named like an earlier disambiguated
+            # copy ("a (1).txt") would land on the same path; keep asking.
+            while disk_name in used_disk_names:
+                disk_name = disambiguate_filename(file.filename, seen_names)
+            used_disk_names.add(disk_name)
 
             tmp_path = os.path.join(tmp_dir, disk_name)
             with open(tmp_path, "wb") as f:
                 f.write(content)
-            saved_filenames.append(file.filename)
+            staged.append((file.filename, disk_name))
 
-        chunk_count = await run_in_threadpool(pipeline.ingest, tmp_dir, session_id=session_id)
+        result = await run_in_threadpool(
+            pipeline.ingest_with_report, tmp_dir, session_id=session_id
+        )
 
     except HTTPException:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -171,17 +191,29 @@ async def upload_documents(
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    if chunk_count == 0:
+    if result.chunks == 0:
         _cleanup_if_new(session_id, is_new_session)
         raise HTTPException(
             status_code=400,
             detail="No readable text was found in the uploaded file(s).",
         )
 
+    # Every uploaded file lands in exactly one list. A file with no recorded
+    # outcome is treated as "no text" rather than claimed as indexed.
+    skipped = []
+    for original, disk_name in staged:
+        if disk_name in result.indexed:
+            continue
+        reason = result.skipped.get(disk_name, NO_TEXT)
+        skipped.append(
+            {"filename": original, "reason": reason, "message": SKIP_MESSAGES[reason]}
+        )
+
     return {
         "session_id": session_id,
-        "filenames": saved_filenames,
-        "chunks": chunk_count,
+        "filenames": [o for o, d in staged if d in result.indexed],
+        "skipped": skipped,
+        "chunks": result.chunks,
         "status": "ready",
     }
 
