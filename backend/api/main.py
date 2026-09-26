@@ -130,7 +130,10 @@ async def upload_documents(
 
     is_new_session = session_id is None
     session_id = session_id or str(uuid.uuid4())
-    tmp_dir = f"/tmp/rag_sessions/{session_id}"
+    # Staged per request, not per session: ingest() scans the whole directory
+    # and cleanup removes it, so a shared per-session dir lets overlapping
+    # uploads to one session ingest and delete each other's files.
+    tmp_dir = f"/tmp/rag_sessions/{uuid.uuid4().hex}"
     os.makedirs(tmp_dir, exist_ok=True)
 
     saved_filenames = []
