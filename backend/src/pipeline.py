@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass, field
 
 from config import settings
 from embedder import get_embedder
@@ -12,6 +13,15 @@ from src.storage.chroma_store import ChromaStore
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class IngestResult:
+    """Outcome of ingesting a directory. `indexed` and `skipped` are keyed
+    by on-disk filename; `skipped` maps to a loader reason code."""
+    chunks: int
+    indexed: set = field(default_factory=set)
+    skipped: dict = field(default_factory=dict)
+
+
 class AskMyDocsPipeline:
     def __init__(self):
         self.embedder = get_embedder()
@@ -23,15 +33,25 @@ class AskMyDocsPipeline:
         `directory`. Returns the number of chunks ingested. Safe to call
         multiple times with the same session_id to add more documents to
         an existing session."""
+        return self.ingest_with_report(directory, session_id=session_id).chunks
+
+    def ingest_with_report(self, directory: str, session_id: str = "default") -> IngestResult:
+        """Same as `ingest()`, but also says which files contributed text
+        and which were skipped (and why)."""
         docs = load_documents(directory)
+        skipped = dict(getattr(docs, "skipped", {}))
         if not docs:
             logger.warning("No supported documents found in %s", directory)
-            return 0
+            return IngestResult(chunks=0, skipped=skipped)
 
         count = self._store_docs(docs, session_id)
         logger.info("Ingested %d chunk(s) from %s | session=%s",
                     count, directory, session_id)
-        return count
+        return IngestResult(
+            chunks=count,
+            indexed={d["file"] for d in docs} if count else set(),
+            skipped=skipped,
+        )
 
     def ingest_url(self, url: str, session_id: str = "default") -> int:
         """Fetch a live URL, chunk, embed, and store it — same shape and

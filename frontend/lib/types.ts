@@ -1,6 +1,15 @@
+export interface SkippedFile {
+  filename: string;
+  reason: "unreadable" | "no_text";
+  message: string;
+}
+
 export interface UploadResponse {
   session_id: string;
+  /** Only files that contributed text to the index. */
   filenames: string[];
+  /** Files that were uploaded but yielded no text. Sent by /upload, not /upload-url. */
+  skipped?: SkippedFile[];
   chunks: number;
   status: string;
 }

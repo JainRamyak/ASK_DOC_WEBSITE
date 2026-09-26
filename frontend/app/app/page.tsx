@@ -13,11 +13,12 @@ import {
   RotateCcw,
   Send,
   ShieldAlert,
+  TriangleAlert,
   Upload,
 } from "lucide-react";
 
 import { askQuestion, deleteSession, humanizeError, uploadDocuments, uploadUrl } from "@/lib/api";
-import { ChatMessage } from "@/lib/types";
+import { ChatMessage, SkippedFile } from "@/lib/types";
 
 function shortName(name: string, max = 34): string {
   if (name.length <= max) return name;
@@ -29,6 +30,7 @@ function shortName(name: string, max = 34): string {
 export default function AppPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [filenames, setFilenames] = useState<string[]>([]);
+  const [skipped, setSkipped] = useState<SkippedFile[]>([]);
   const [chunkCount, setChunkCount] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState("");
@@ -51,6 +53,7 @@ export default function AppPage() {
         const res = await uploadDocuments(files, appendToExisting ? sessionId ?? undefined : undefined);
         setSessionId(res.session_id);
         setFilenames((prev) => (appendToExisting ? [...prev, ...res.filenames] : res.filenames));
+        setSkipped((prev) => (appendToExisting ? [...prev, ...(res.skipped ?? [])] : res.skipped ?? []));
         setChunkCount((prev) => (appendToExisting ? prev + res.chunks : res.chunks));
       } catch (e) {
         setError(humanizeError(e));
@@ -71,6 +74,7 @@ export default function AppPage() {
         const res = await uploadUrl(url, appendToExisting ? sessionId ?? undefined : undefined);
         setSessionId(res.session_id);
         setFilenames((prev) => (appendToExisting ? [...prev, ...res.filenames] : res.filenames));
+        setSkipped((prev) => (appendToExisting ? [...prev, ...(res.skipped ?? [])] : res.skipped ?? []));
         setChunkCount((prev) => (appendToExisting ? prev + res.chunks : res.chunks));
         setUrlInput("");
         setShowUrlInput(false);
@@ -136,6 +140,7 @@ export default function AppPage() {
     if (sessionId) await deleteSession(sessionId);
     setSessionId(null);
     setFilenames([]);
+    setSkipped([]);
     setChunkCount(0);
     setMessages([]);
     setError(null);
@@ -232,6 +237,25 @@ export default function AppPage() {
               </label>
             </div>
           </div>
+
+          {skipped.length > 0 && (
+            <div
+              role="status"
+              className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-200"
+            >
+              <div className="flex items-center gap-2 font-medium">
+                <TriangleAlert size={16} className="shrink-0" />
+                {skipped.length === 1 ? "1 file wasn't indexed" : `${skipped.length} files weren't indexed`}
+              </div>
+              <ul className="mt-1 space-y-0.5 pl-6 text-amber-100/80">
+                {skipped.map((s, i) => (
+                  <li key={`${s.filename}-${i}`}>
+                    <span className="font-medium">{shortName(s.filename)}</span> &mdash; {s.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {showUrlInput && (
             <div className="mb-4 flex items-center gap-2 rounded-full border border-white/15 bg-[var(--color-ink-raised)] px-4 py-2">
