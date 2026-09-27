@@ -77,7 +77,11 @@ class _Settings:
 
     # Session storage
     chroma_persist_dir: str = _optional("CHROMA_PERSIST_DIR", "outputs/chroma")
+    # Idle timeout: hours since a session's last /upload or /query.
     session_ttl_hours: int = int(_optional("SESSION_TTL_HOURS", "24"))
+    # Absolute cap: hours since a session's creation, regardless of
+    # activity. A session expires at whichever of the two fires first.
+    session_max_lifetime_hours: int = int(_optional("SESSION_MAX_LIFETIME_HOURS", "168"))
 
     # CORS
     allowed_origins_raw: str = _optional("ALLOWED_ORIGINS", "")
