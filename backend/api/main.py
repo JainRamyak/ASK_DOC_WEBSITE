@@ -18,6 +18,7 @@ from starlette.concurrency import run_in_threadpool
 
 from config import settings
 from logger import setup_logging
+from src.generation.answer_chain import LLMConfigError
 from src.ingestion.loader import NO_TEXT, UNREADABLE
 from src.ingestion.web_loader import URLValidationError
 from src.pipeline import AskMyDocsPipeline
@@ -104,6 +105,11 @@ SKIP_MESSAGES = {
     ),
 }
 
+# Fixed, safe strings for unexpected-exception responses — never str(e).
+# Shared verbatim across routes per docs/DECISIONS.md (G13).
+GENERIC_ERROR_MESSAGE = "Something went wrong while processing your request. Please try again."
+CONFIG_ERROR_MESSAGE = "The assistant is temporarily unavailable. Please try again later."
+
 
 class QueryRequest(BaseModel):
     session_id: str
@@ -189,11 +195,11 @@ async def upload_documents(
     except HTTPException:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Upload ingestion failed")
         shutil.rmtree(tmp_dir, ignore_errors=True)
         _cleanup_if_new(session_id, is_new_session)
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
+        raise HTTPException(status_code=500, detail=GENERIC_ERROR_MESSAGE)
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -253,10 +259,10 @@ async def upload_url(request: UploadURLRequest):
     except URLValidationError as e:
         _cleanup_if_new(session_id, is_new_session)
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except Exception:
         logger.exception("URL ingestion failed")
         _cleanup_if_new(session_id, is_new_session)
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
+        raise HTTPException(status_code=500, detail=GENERIC_ERROR_MESSAGE)
 
     if result.chunks == 0 and not result.already_indexed:
         _cleanup_if_new(session_id, is_new_session)
@@ -296,9 +302,12 @@ async def query_document(request: QueryRequest):
         result = await run_in_threadpool(
             pipeline.ask, request.question, session_id=request.session_id, history=request.history
         )
-    except Exception as e:
+    except LLMConfigError:
         logger.exception("Query failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=503, detail=CONFIG_ERROR_MESSAGE)
+    except Exception:
+        logger.exception("Query failed")
+        raise HTTPException(status_code=500, detail=GENERIC_ERROR_MESSAGE)
 
     return result
 
