@@ -30,12 +30,17 @@ logger = logging.getLogger(__name__)
 
 async def _session_cleanup_loop(pipeline: "AskMyDocsPipeline"):
     """Runs for the lifetime of the process, deleting expired sessions
-    every hour. See config.settings.session_ttl_hours. Turns
+    every hour. See config.settings.session_ttl_hours (idle timeout) and
+    session_max_lifetime_hours (absolute cap from creation). Turns
     ChromaStore.cleanup_expired() from an unwired method into something
     that actually runs, instead of requiring a separate cron job."""
     while True:
         try:
-            await run_in_threadpool(pipeline.chroma_store.cleanup_expired, settings.session_ttl_hours)
+            await run_in_threadpool(
+                pipeline.chroma_store.cleanup_expired,
+                settings.session_ttl_hours,
+                settings.session_max_lifetime_hours,
+            )
         except Exception:
             logger.exception("Session cleanup pass failed (will retry next hour)")
         await asyncio.sleep(3600)
@@ -45,8 +50,9 @@ async def _session_cleanup_loop(pipeline: "AskMyDocsPipeline"):
 async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(_session_cleanup_loop(pipeline))
     logger.info(
-        "Session cleanup scheduled | ttl_hours=%d | interval=hourly",
+        "Session cleanup scheduled | ttl_hours=%d | max_lifetime_hours=%d | interval=hourly",
         settings.session_ttl_hours,
+        settings.session_max_lifetime_hours,
     )
     yield
     cleanup_task.cancel()

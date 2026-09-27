@@ -30,10 +30,34 @@ class ChromaStore:
         self._add_lock = threading.Lock()
 
     def get_or_create_collection(self, session_id: str):
+        now = time.time()
         return self.client.get_or_create_collection(
             name=f"session_{session_id}",
-            metadata={"hnsw:space": "cosine", "created_at": time.time()},
+            # metadata= is only honored on first creation — chromadb
+            # silently ignores it on a subsequent get_or_create against an
+            # existing collection (confirmed against 1.5.9), so a session's
+            # last_activity_at must be advanced separately via
+            # _touch_activity()/collection.modify(). created_at and
+            # last_activity_at start equal (G10 R5): a session that's never
+            # touched again still expires at ttl_hours from creation.
+            metadata={"hnsw:space": "cosine", "created_at": now, "last_activity_at": now},
         )
+
+    def _touch_activity(self, collection) -> None:
+        """Advances a collection's last_activity_at to now (G10 R1).
+        collection.modify() replaces its metadata wholesale rather than
+        merging, so the existing metadata is read and merged in here —
+        a naive metadata={"last_activity_at": ...} call would silently
+        drop created_at. hnsw:space must be dropped before the call:
+        chromadb rejects any modify() whose metadata contains that key
+        at all, even unchanged ("Changing the distance function of a
+        collection once it is created is not supported currently") —
+        confirmed against 1.5.9. It's fixed at creation regardless, so
+        omitting it here loses nothing but its mirror in .metadata."""
+        metadata = dict(collection.metadata or {})
+        metadata.pop("hnsw:space", None)
+        metadata["last_activity_at"] = time.time()
+        collection.modify(metadata=metadata)
 
     def add(self, session_id: str, chunks: list, embeddings: list, metadatas: list) -> set:
         """Adds chunks to a session's collection, skipping any whose
@@ -93,15 +117,21 @@ class ChromaStore:
                     metadatas=[metadatas[i] for i in keep],
                     ids=ids,
                 )
+            self._touch_activity(collection)
             return newly_added_hashes
 
     def query(self, session_id: str, query_embedding: list, top_k: int = 5) -> dict:
         collection = self.client.get_collection(f"session_{session_id}")
-        return collection.query(
+        result = collection.query(
             query_embeddings=[query_embedding],
             n_results=min(top_k, max(collection.count(), 1)),
             include=["documents", "metadatas", "distances"],
         )
+        # A session already deleted by cleanup_expired raises above and
+        # never reaches this line, so a query can't resurrect a dead
+        # session's liveness (G10 R7).
+        self._touch_activity(collection)
+        return result
 
     def session_exists(self, session_id: str) -> bool:
         try:
@@ -116,15 +146,26 @@ class ChromaStore:
         except chromadb.errors.NotFoundError:
             return False
 
-    def cleanup_expired(self, ttl_hours: int) -> int:
-        """Delete collections older than ttl_hours. Call periodically
-        (e.g. from a cron/scheduled task) to stop storage from growing
-        forever on a free-tier disk."""
-        cutoff = time.time() - ttl_hours * 3600
+    def cleanup_expired(self, ttl_hours: int, max_lifetime_hours: int) -> int:
+        """Delete a collection once EITHER window elapses (G10): idle for
+        more than ttl_hours since its last activity, or older than
+        max_lifetime_hours since creation regardless of activity. Call
+        periodically (e.g. from a cron/scheduled task) to stop storage
+        from growing forever on a free-tier disk."""
+        now = time.time()
+        idle_cutoff = now - ttl_hours * 3600
+        lifetime_cutoff = now - max_lifetime_hours * 3600
         deleted = 0
         for coll in self.client.list_collections():
-            created_at = coll.metadata.get("created_at") if coll.metadata else None
-            if created_at is not None and created_at < cutoff:
+            metadata = coll.metadata or {}
+            created_at = metadata.get("created_at")
+            # Collections stored before this change ships have no
+            # last_activity_at yet — fall back to created_at so they
+            # still expire under the idle-timeout rule.
+            last_activity_at = metadata.get("last_activity_at", created_at)
+            idle_expired = last_activity_at is not None and last_activity_at < idle_cutoff
+            lifetime_expired = created_at is not None and created_at < lifetime_cutoff
+            if idle_expired or lifetime_expired:
                 self.client.delete_collection(coll.name)
                 deleted += 1
         if deleted:
