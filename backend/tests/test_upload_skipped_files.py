@@ -164,10 +164,18 @@ def test_concurrent_upload_with_a_blank_file_reports_correctly(api):
 # ── AC9 (R11) ────────────────────────────────────────────────────────────
 
 def test_upload_url_response_is_unchanged(api, monkeypatch):
-    monkeypatch.setattr(api.pipeline, "ingest_url", lambda url, session_id="default": 3)
+    # G27: ingest_url now returns an IngestResult, not a bare int.
+    monkeypatch.setattr(
+        api.pipeline,
+        "ingest_url",
+        lambda url, session_id="default": pipeline_module.IngestResult(
+            chunks=3, indexed={url}
+        ),
+    )
     resp = asyncio.run(api.upload_url(api.UploadURLRequest(url=" https://example.com/x ")))
-    assert set(resp) == {"session_id", "filenames", "chunks", "status"}
+    assert set(resp) == {"session_id", "filenames", "already_indexed", "chunks", "status"}
     assert resp["filenames"] == ["https://example.com/x"] and resp["chunks"] == 3
+    assert resp["already_indexed"] == []
 
 
 # ── Caller contracts ─────────────────────────────────────────────────────

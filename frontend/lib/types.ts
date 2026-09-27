@@ -4,12 +4,20 @@ export interface SkippedFile {
   message: string;
 }
 
+export interface AlreadyIndexedFile {
+  filename: string;
+  hash: string;
+}
+
 export interface UploadResponse {
   session_id: string;
   /** Only files that contributed text to the index. */
   filenames: string[];
   /** Files that were uploaded but yielded no text. Sent by /upload, not /upload-url. */
   skipped?: SkippedFile[];
+  /** Files/URLs whose content was already indexed in this session, so
+   *  they weren't re-indexed. Sent by both /upload and /upload-url. */
+  already_indexed?: AlreadyIndexedFile[];
   chunks: number;
   status: string;
 }

@@ -191,7 +191,7 @@ async def upload_documents(
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    if result.chunks == 0:
+    if result.chunks == 0 and not result.already_indexed:
         _cleanup_if_new(session_id, is_new_session)
         raise HTTPException(
             status_code=400,
@@ -200,19 +200,27 @@ async def upload_documents(
 
     # Every uploaded file lands in exactly one list. A file with no recorded
     # outcome is treated as "no text" rather than claimed as indexed.
+    filenames = []
+    already_indexed = []
     skipped = []
     for original, disk_name in staged:
         if disk_name in result.indexed:
-            continue
-        reason = result.skipped.get(disk_name, NO_TEXT)
-        skipped.append(
-            {"filename": original, "reason": reason, "message": SKIP_MESSAGES[reason]}
-        )
+            filenames.append(original)
+        elif disk_name in result.already_indexed:
+            already_indexed.append(
+                {"filename": original, "hash": result.already_indexed[disk_name]}
+            )
+        else:
+            reason = result.skipped.get(disk_name, NO_TEXT)
+            skipped.append(
+                {"filename": original, "reason": reason, "message": SKIP_MESSAGES[reason]}
+            )
 
     return {
         "session_id": session_id,
-        "filenames": [o for o, d in staged if d in result.indexed],
+        "filenames": filenames,
         "skipped": skipped,
+        "already_indexed": already_indexed,
         "chunks": result.chunks,
         "status": "ready",
     }
@@ -233,7 +241,7 @@ async def upload_url(request: UploadURLRequest):
     session_id = request.session_id or str(uuid.uuid4())
 
     try:
-        chunk_count = await run_in_threadpool(
+        result = await run_in_threadpool(
             pipeline.ingest_url, request.url.strip(), session_id=session_id
         )
     except URLValidationError as e:
@@ -244,17 +252,22 @@ async def upload_url(request: UploadURLRequest):
         _cleanup_if_new(session_id, is_new_session)
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
 
-    if chunk_count == 0:
+    if result.chunks == 0 and not result.already_indexed:
         _cleanup_if_new(session_id, is_new_session)
         raise HTTPException(
             status_code=400,
             detail="No readable text was found at that URL.",
         )
 
+    already_indexed = [
+        {"filename": url, "hash": h} for url, h in result.already_indexed.items()
+    ]
+
     return {
         "session_id": session_id,
-        "filenames": [request.url.strip()],
-        "chunks": chunk_count,
+        "filenames": [request.url.strip()] if result.indexed else [],
+        "already_indexed": already_indexed,
+        "chunks": result.chunks,
         "status": "ready",
     }
 

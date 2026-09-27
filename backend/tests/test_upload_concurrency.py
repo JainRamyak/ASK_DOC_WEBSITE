@@ -267,7 +267,7 @@ def test_no_staging_data_left_after_success_and_failures(api):
 def test_sequential_new_and_append_response_contract(api):
     a_text, b_text = _text("a", 2), _text("b")
     first = _upload_one(api, None, [("a.txt", a_text.encode())])
-    assert set(first) == {"session_id", "filenames", "skipped", "chunks", "status"}
+    assert set(first) == {"session_id", "filenames", "skipped", "already_indexed", "chunks", "status"}
     assert first["skipped"] == []
     assert first["filenames"] == ["a.txt"]
     assert first["status"] == "ready"

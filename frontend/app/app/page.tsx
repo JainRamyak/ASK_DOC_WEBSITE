@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   FileText,
+  Info,
   Link2,
   Loader2,
   RotateCcw,
@@ -18,7 +19,7 @@ import {
 } from "lucide-react";
 
 import { askQuestion, deleteSession, humanizeError, uploadDocuments, uploadUrl } from "@/lib/api";
-import { ChatMessage, SkippedFile } from "@/lib/types";
+import { AlreadyIndexedFile, ChatMessage, SkippedFile } from "@/lib/types";
 
 function shortName(name: string, max = 34): string {
   if (name.length <= max) return name;
@@ -31,6 +32,7 @@ export default function AppPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [filenames, setFilenames] = useState<string[]>([]);
   const [skipped, setSkipped] = useState<SkippedFile[]>([]);
+  const [alreadyIndexed, setAlreadyIndexed] = useState<AlreadyIndexedFile[]>([]);
   const [chunkCount, setChunkCount] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState("");
@@ -54,6 +56,9 @@ export default function AppPage() {
         setSessionId(res.session_id);
         setFilenames((prev) => (appendToExisting ? [...prev, ...res.filenames] : res.filenames));
         setSkipped((prev) => (appendToExisting ? [...prev, ...(res.skipped ?? [])] : res.skipped ?? []));
+        setAlreadyIndexed((prev) =>
+          appendToExisting ? [...prev, ...(res.already_indexed ?? [])] : res.already_indexed ?? []
+        );
         setChunkCount((prev) => (appendToExisting ? prev + res.chunks : res.chunks));
       } catch (e) {
         setError(humanizeError(e));
@@ -75,6 +80,9 @@ export default function AppPage() {
         setSessionId(res.session_id);
         setFilenames((prev) => (appendToExisting ? [...prev, ...res.filenames] : res.filenames));
         setSkipped((prev) => (appendToExisting ? [...prev, ...(res.skipped ?? [])] : res.skipped ?? []));
+        setAlreadyIndexed((prev) =>
+          appendToExisting ? [...prev, ...(res.already_indexed ?? [])] : res.already_indexed ?? []
+        );
         setChunkCount((prev) => (appendToExisting ? prev + res.chunks : res.chunks));
         setUrlInput("");
         setShowUrlInput(false);
@@ -141,6 +149,7 @@ export default function AppPage() {
     setSessionId(null);
     setFilenames([]);
     setSkipped([]);
+    setAlreadyIndexed([]);
     setChunkCount(0);
     setMessages([]);
     setError(null);
@@ -251,6 +260,28 @@ export default function AppPage() {
                 {skipped.map((s, i) => (
                   <li key={`${s.filename}-${i}`}>
                     <span className="font-medium">{shortName(s.filename)}</span> &mdash; {s.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {alreadyIndexed.length > 0 && (
+            <div
+              role="status"
+              className="mb-4 rounded-xl border border-white/10 bg-[var(--color-ink-raised)] px-4 py-3 text-sm text-[var(--color-ink-muted)]"
+            >
+              <div className="flex items-center gap-2 font-medium text-[var(--color-ink-text)]">
+                <Info size={16} className="shrink-0" />
+                {alreadyIndexed.length === 1
+                  ? "1 file was already indexed"
+                  : `${alreadyIndexed.length} files were already indexed`}
+              </div>
+              <ul className="mt-1 space-y-0.5 pl-6">
+                {alreadyIndexed.map((a, i) => (
+                  <li key={`${a.filename}-${i}`}>
+                    <span className="font-medium text-[var(--color-ink-text)]">{shortName(a.filename)}</span> is
+                    identical to a document already in this session &mdash; not indexed again.
                   </li>
                 ))}
               </ul>
