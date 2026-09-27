@@ -18,6 +18,14 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+
+class LLMConfigError(Exception):
+    """Raised for any LLM provider misconfiguration (missing/invalid API
+    key, missing SDK, unrecognized LLM_PROVIDER). Caught by /query in
+    api/main.py and mapped to a 503 — never shown to the client
+    verbatim."""
+
+
 NOT_FOUND_MESSAGE = "I could not find this in the provided documents."
 
 SYSTEM_PROMPT = f"""You are a precise document assistant.
@@ -74,7 +82,7 @@ def answer(question: str, chunks: List[dict]) -> dict:
     }
 
     if provider not in dispatch:
-        raise ValueError(
+        raise LLMConfigError(
             f"Unknown LLM_PROVIDER='{provider}' in .env. Valid: {list(dispatch)}"
         )
 
@@ -86,10 +94,10 @@ def _answer_gemini(question: str, context: str, chunks: List[dict]) -> dict:
         from google import genai
         from google.genai import types
     except ImportError:
-        raise ImportError("Run: pip install google-genai")
+        raise LLMConfigError("Run: pip install google-genai")
 
     if not settings.gemini_api_key:
-        raise EnvironmentError(
+        raise LLMConfigError(
             "GEMINI_API_KEY is not set in .env. Get a free key at https://aistudio.google.com"
         )
 
@@ -119,10 +127,10 @@ def _answer_mistral(question: str, context: str, chunks: List[dict]) -> dict:
     try:
         from mistralai.client import Mistral
     except ImportError:
-        raise ImportError("Run: pip install mistralai")
+        raise LLMConfigError("Run: pip install mistralai")
 
     if not settings.mistral_api_key:
-        raise EnvironmentError(
+        raise LLMConfigError(
             "MISTRAL_API_KEY is not set in .env. Get a free key at https://console.mistral.ai"
         )
 
@@ -145,10 +153,10 @@ def _answer_openai(question: str, context: str, chunks: List[dict]) -> dict:
     try:
         from openai import OpenAI
     except ImportError:
-        raise ImportError("Run: pip install openai")
+        raise LLMConfigError("Run: pip install openai")
 
     if not settings.openai_api_key:
-        raise EnvironmentError("OPENAI_API_KEY is not set in .env")
+        raise LLMConfigError("OPENAI_API_KEY is not set in .env")
 
     client = OpenAI(api_key=settings.openai_api_key)
     resp = client.chat.completions.create(
@@ -169,10 +177,10 @@ def _answer_anthropic(question: str, context: str, chunks: List[dict]) -> dict:
     try:
         import anthropic
     except ImportError:
-        raise ImportError("Run: pip install anthropic")
+        raise LLMConfigError("Run: pip install anthropic")
 
     if not settings.anthropic_api_key:
-        raise EnvironmentError(
+        raise LLMConfigError(
             "ANTHROPIC_API_KEY is not set in .env. Get a key at https://console.anthropic.com"
         )
 
