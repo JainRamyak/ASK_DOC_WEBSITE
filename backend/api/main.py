@@ -305,6 +305,7 @@ async def query_document(request: QueryRequest):
 
 @app.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
+    _validate_client_session_id(session_id)
     deleted = pipeline.chroma_store.delete_session(session_id)
     return {"deleted": session_id, "success": deleted}
 
