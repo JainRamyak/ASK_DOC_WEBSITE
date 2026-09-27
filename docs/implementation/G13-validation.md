@@ -68,11 +68,11 @@ All 8 Acceptance Criteria: **VERIFIED**, none PARTIALLY VERIFIED/UNVERIFIED/FAIL
 - [x] Diff reviewed — **APPLICABLE+VERIFIED** — `git diff backend/api/main.py backend/src/generation/answer_chain.py` reviewed in full and quoted in the implementation handoff; matches the plan exactly, no surprises.
 - [x] No unrelated changes — **APPLICABLE+VERIFIED** — `git status --short backend/ frontend/ .github/ railway.toml render.yaml docker-compose.yml` shows only the 3 planned files; the many other modified/untracked doc files visible in `git status` predate this branch entirely (pre-existing multi-session workflow state, same situation noted in G11's validation) and are not part of this change's diff.
 - [ ] Documentation updated (where necessary) — **NOT_APPLICABLE** — no user-facing docs, README, or API docs describe the exact wording of error responses; the spec/plan/validation docs themselves are the record, and `docs/PROJECT_BACKLOG.md`'s G13 entry was already updated to APPROVED during specification.
-- [ ] Commit created — **APPLICABLE+NOT_YET_VERIFIED** — the fix and test file are uncommitted on `fix/G13-hide-raw-exception-detail` as of this validation session; committing is left to the review/PR step, per G01/G02/G11/G27/G10 precedent.
-- [ ] Branch pushed (where applicable) — **APPLICABLE+NOT_YET_VERIFIED** — not yet pushed; follows commit.
-- [ ] PR created (where applicable) — **APPLICABLE+NOT_YET_VERIFIED** — not yet created; next step is `review`.
-- [x] CI passed (where applicable) — **APPLICABLE+VERIFIED** — local run of the exact CI command (`pytest tests/test_embedder.py tests/test_web_loader.py -v` from `backend/`), 32 passed. GitHub Actions itself only runs once a PR/push exists.
-- [ ] Review completed (where applicable) — **APPLICABLE+NOT_YET_VERIFIED** — this is Phase 1 (validation); review is the next session.
+- [x] Commit created — **APPLICABLE+VERIFIED** — `60a1084` "fix(G13): stop returning raw exception text on HTTP 500/503" on `fix/G13-hide-raw-exception-detail` (session `REVIEW-G13-2026-09-27`).
+- [x] Branch pushed (where applicable) — **APPLICABLE+VERIFIED** — `git push -u origin fix/G13-hide-raw-exception-detail` succeeded.
+- [x] PR created (where applicable) — **APPLICABLE+VERIFIED** — PR #9, https://github.com/JainRamyak/ASK_DOC_WEBSITE/pull/9, open against `main`.
+- [x] CI passed (where applicable) — **APPLICABLE+VERIFIED** — local run 32/32 passed; GitHub Actions `test` check on the pushed commit `60a1084` completed with conclusion `success` (see CI status section below).
+- [ ] Review completed (where applicable) — **APPLICABLE+NOT_YET_VERIFIED** — PR is open; human review has not yet happened.
 - [ ] Merge completed (where applicable) — **APPLICABLE+NOT_YET_VERIFIED** — per CLAUDE.md, only a human merges; not attempted.
 - [ ] Post-merge verification completed (where applicable) — **APPLICABLE+NOT_YET_VERIFIED** — follows merge.
 - [ ] Branch cleanup completed (where applicable) — **APPLICABLE+NOT_YET_VERIFIED** — follows merge.
@@ -81,3 +81,6 @@ All 8 Acceptance Criteria: **VERIFIED**, none PARTIALLY VERIFIED/UNVERIFIED/FAIL
 
 ## Overall Verdict
 **PASS.** All 8 Acceptance Criteria VERIFIED with direct evidence, including a full reproduce→fix→reproduce→verify chain (using the spec's own OBSERVED scenario) and a 90+32 test regression sweep, all run fresh in this session. Ready for `review`.
+
+## CI status (REVIEW-G13-2026-09-27)
+PR #9 opened from `fix/G13-hide-raw-exception-detail` into `main`. GitHub Actions `test` check on commit `60a1084`: **completed, conclusion `success`**, both matrix runs ([36335370393](https://github.com/JainRamyak/ASK_DOC_WEBSITE/actions/runs/36335370393/job/108665088905), [36335339354](https://github.com/JainRamyak/ASK_DOC_WEBSITE/actions/runs/36335339354/job/108665002911)), confirmed via the GitHub REST API `check-runs` endpoint (`gh` CLI unavailable in this environment, same workaround as G11's post-merge verification). `Vercel Preview Comments` check also completed successfully (unrelated to this backend-only change).
