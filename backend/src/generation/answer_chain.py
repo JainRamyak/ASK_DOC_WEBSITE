@@ -89,10 +89,33 @@ def answer(question: str, chunks: List[dict]) -> dict:
     return dispatch[provider](question, context, chunks)
 
 
-def _answer_gemini(question: str, context: str, chunks: List[dict]) -> dict:
+def check_llm_config() -> None:
+    """Validates the configured LLM_PROVIDER is usable — the same checks
+    _answer_<provider>() performs lazily on first real use — without
+    constructing a client or making a network call. Raises
+    LLMConfigError on failure. Used by GET /ready (api/main.py) so a
+    misconfiguration is discoverable before a user hits /query."""
+    provider = settings.llm_provider
+
+    requires = {
+        "gemini": _require_gemini,
+        "mistral": _require_mistral,
+        "openai": _require_openai,
+        "anthropic": _require_anthropic,
+    }
+
+    if provider not in requires:
+        raise LLMConfigError(
+            f"Unknown LLM_PROVIDER='{provider}' in .env. Valid: {list(requires)}"
+        )
+
+    requires[provider]()
+
+
+def _require_gemini() -> None:
     try:
-        from google import genai
-        from google.genai import types
+        from google import genai  # noqa: F401
+        from google.genai import types  # noqa: F401
     except ImportError:
         raise LLMConfigError("Run: pip install google-genai")
 
@@ -100,6 +123,46 @@ def _answer_gemini(question: str, context: str, chunks: List[dict]) -> dict:
         raise LLMConfigError(
             "GEMINI_API_KEY is not set in .env. Get a free key at https://aistudio.google.com"
         )
+
+
+def _require_mistral() -> None:
+    try:
+        from mistralai.client import Mistral  # noqa: F401
+    except ImportError:
+        raise LLMConfigError("Run: pip install mistralai")
+
+    if not settings.mistral_api_key:
+        raise LLMConfigError(
+            "MISTRAL_API_KEY is not set in .env. Get a free key at https://console.mistral.ai"
+        )
+
+
+def _require_openai() -> None:
+    try:
+        from openai import OpenAI  # noqa: F401
+    except ImportError:
+        raise LLMConfigError("Run: pip install openai")
+
+    if not settings.openai_api_key:
+        raise LLMConfigError("OPENAI_API_KEY is not set in .env")
+
+
+def _require_anthropic() -> None:
+    try:
+        import anthropic  # noqa: F401
+    except ImportError:
+        raise LLMConfigError("Run: pip install anthropic")
+
+    if not settings.anthropic_api_key:
+        raise LLMConfigError(
+            "ANTHROPIC_API_KEY is not set in .env. Get a key at https://console.anthropic.com"
+        )
+
+
+def _answer_gemini(question: str, context: str, chunks: List[dict]) -> dict:
+    _require_gemini()
+    from google import genai
+    from google.genai import types
 
     client = genai.Client(api_key=settings.gemini_api_key)
     response = client.models.generate_content(
@@ -124,15 +187,8 @@ def _answer_gemini(question: str, context: str, chunks: List[dict]) -> dict:
 
 
 def _answer_mistral(question: str, context: str, chunks: List[dict]) -> dict:
-    try:
-        from mistralai.client import Mistral
-    except ImportError:
-        raise LLMConfigError("Run: pip install mistralai")
-
-    if not settings.mistral_api_key:
-        raise LLMConfigError(
-            "MISTRAL_API_KEY is not set in .env. Get a free key at https://console.mistral.ai"
-        )
+    _require_mistral()
+    from mistralai.client import Mistral
 
     client = Mistral(api_key=settings.mistral_api_key)
     response = client.chat.complete(
@@ -150,13 +206,8 @@ def _answer_mistral(question: str, context: str, chunks: List[dict]) -> dict:
 
 
 def _answer_openai(question: str, context: str, chunks: List[dict]) -> dict:
-    try:
-        from openai import OpenAI
-    except ImportError:
-        raise LLMConfigError("Run: pip install openai")
-
-    if not settings.openai_api_key:
-        raise LLMConfigError("OPENAI_API_KEY is not set in .env")
+    _require_openai()
+    from openai import OpenAI
 
     client = OpenAI(api_key=settings.openai_api_key)
     resp = client.chat.completions.create(
@@ -174,15 +225,8 @@ def _answer_openai(question: str, context: str, chunks: List[dict]) -> dict:
 
 
 def _answer_anthropic(question: str, context: str, chunks: List[dict]) -> dict:
-    try:
-        import anthropic
-    except ImportError:
-        raise LLMConfigError("Run: pip install anthropic")
-
-    if not settings.anthropic_api_key:
-        raise LLMConfigError(
-            "ANTHROPIC_API_KEY is not set in .env. Get a key at https://console.anthropic.com"
-        )
+    _require_anthropic()
+    import anthropic
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     # Model IDs change over time — if this 404s, check

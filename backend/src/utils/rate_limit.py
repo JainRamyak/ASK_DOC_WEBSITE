@@ -27,9 +27,10 @@ class InMemoryRateLimiter(BaseHTTPMiddleware):
         self._hits: dict[str, deque] = defaultdict(deque)
 
     async def dispatch(self, request: Request, call_next):
-        # /health is exempted — uptime pingers hit it constantly and it
-        # does no real work, no reason to count it against the limit.
-        if request.url.path == "/health":
+        # /health and /ready are exempted — uptime pingers/monitors hit
+        # them constantly and neither does real work, no reason to count
+        # either against the limit.
+        if request.url.path in ("/health", "/ready"):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"

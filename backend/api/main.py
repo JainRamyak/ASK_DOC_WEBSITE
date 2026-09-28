@@ -13,12 +13,13 @@ from typing import List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from config import settings
 from logger import setup_logging
-from src.generation.answer_chain import LLMConfigError
+from src.generation.answer_chain import LLMConfigError, check_llm_config
 from src.ingestion.loader import NO_TEXT, UNREADABLE
 from src.ingestion.web_loader import URLValidationError
 from src.pipeline import AskMyDocsPipeline
@@ -110,6 +111,13 @@ SKIP_MESSAGES = {
 GENERIC_ERROR_MESSAGE = "Something went wrong while processing your request. Please try again."
 CONFIG_ERROR_MESSAGE = "The assistant is temporarily unavailable. Please try again later."
 
+# G14: fixed, safe string for /ready — never str(e), the invalid
+# provider name, or any part of a key.
+READY_ERROR_MESSAGE = (
+    "The configured LLM provider is not ready (missing API key, "
+    "unrecognized provider, or missing SDK)."
+)
+
 
 class QueryRequest(BaseModel):
     session_id: str
@@ -134,6 +142,23 @@ class FeedbackRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "2.2.0"}
+
+
+@app.get("/ready")
+def ready():
+    """Reports whether the configured LLM_PROVIDER is actually usable
+    (key present, provider recognized, SDK importable) — discoverable
+    before a user hits /query, without a network/API call (G14).
+    Separate from /health on purpose: platform healthchecks (Railway,
+    Render, docker-compose) stay pointed at /health so this never
+    triggers a restart/redeploy for a backend that is otherwise up."""
+    try:
+        check_llm_config()
+    except LLMConfigError:
+        return JSONResponse(
+            status_code=503, content={"ready": False, "reason": READY_ERROR_MESSAGE}
+        )
+    return {"ready": True}
 
 
 @app.post("/upload")
