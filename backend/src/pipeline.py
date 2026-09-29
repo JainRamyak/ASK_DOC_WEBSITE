@@ -220,5 +220,7 @@ class AskMyDocsPipeline:
         # one — the rewrite is a retrieval aid, the user asked the
         # original phrasing and should see it addressed directly.
         result = answer(question, top_chunks)
+        if result["answer"].strip() == NOT_FOUND_MESSAGE:
+            return {"answer": NOT_FOUND_MESSAGE, "sources": [], "grounded": False}
         result["grounded"] = True
         return result
