@@ -387,11 +387,14 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[var(--color-paper-line)] pt-3">
             {message.sources.map((s, i) => (
               <span
-                key={i}
+                key={s.n ?? i}
                 className="citation-mark flex items-center gap-1 rounded-full text-xs"
                 title={`relevance score: ${s.score.toFixed(2)}`}
               >
-                <FileText size={11} /> {s.source}
+                <FileText size={11} />
+                {s.n !== undefined && `[${s.n}] `}
+                {s.page !== undefined ? s.source.replace(/#page\d+$/, "") : s.source}
+                {s.page !== undefined && ` · p.${s.page}`}
               </span>
             ))}
           </div>

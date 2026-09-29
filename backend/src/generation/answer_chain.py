@@ -12,7 +12,8 @@ Supported providers (set LLM_PROVIDER in .env):
     anthropic — Anthropic Claude Sonnet   (paid)
 """
 import logging
-from typing import List
+import re
+from typing import List, Optional
 
 from config import settings
 
@@ -45,28 +46,47 @@ def _build_context(chunks: List[dict]) -> str:
     return "\n\n".join(parts)
 
 
+_PDF_SOURCE_RE = re.compile(r"^.+#page(\d+)$")
+
+
+def _pdf_page(chunk: dict) -> Optional[int]:
+    """The PDF page number for a chunk, or None if it isn't a PDF page.
+    The loader stamps PDF sources as "<file>#page<N>" with page=N, but the
+    chunker defaults `page` to 1 for every other source type, so the page
+    value alone can't identify a PDF. A URL that happens to end in
+    "#pageN" must not count either, so URLs are excluded and the suffix
+    must agree with the stored page."""
+    source = chunk.get("source")
+    page = chunk.get("page")
+    if not isinstance(source, str) or not isinstance(page, int):
+        return None
+    if source.startswith(("http://", "https://")):
+        return None
+    m = _PDF_SOURCE_RE.match(source)
+    if m and int(m.group(1)) == page:
+        return page
+    return None
+
+
 def _sources(chunks: List[dict]) -> List[dict]:
-    """Dedupe by source URL/filename, keeping the highest score seen.
-    Several of the top-N reranked chunks often come from the same page
-    or file — without this, the UI shows the identical citation link
-    repeated N times instead of once."""
-    best: dict = {}
-    order: List[str] = []
-    for c in chunks:
-        src = c.get("source")
-        score = c.get("score", 0)
-        if src not in best:
-            best[src] = score
-            order.append(src)
-        elif score > best[src]:
-            best[src] = score
-    return [{"source": src, "score": best[src]} for src in order]
+    """One entry per context chunk, numbered with the same 1-based
+    position _build_context labels it with, so an `[n]` marker in the
+    answer identifies exactly one entry. `page` is present only for PDF
+    pages."""
+    sources = []
+    for n, c in enumerate(chunks, 1):
+        entry = {"n": n, "source": c.get("source"), "score": c.get("score", 0)}
+        page = _pdf_page(c)
+        if page is not None:
+            entry["page"] = page
+        sources.append(entry)
+    return sources
 
 
 def answer(question: str, chunks: List[dict]) -> dict:
     """
     Generate a cited answer from retrieved chunks.
-    Returns: {"answer": str, "sources": [{"source": ..., "score": ...}]}
+    Returns: {"answer": str, "sources": [{"n": ..., "source": ..., "score": ...[, "page": ...]}]}
     """
     if not chunks:
         return {"answer": NOT_FOUND_MESSAGE, "sources": []}

@@ -167,10 +167,12 @@ class AskMyDocsPipeline:
         if not documents:
             return []
 
-        candidates = [
-            {"text": doc, "source": meta.get("source", "unknown")}
-            for doc, meta in zip(documents, metadatas)
-        ]
+        candidates = []
+        for doc, meta in zip(documents, metadatas):
+            candidate = {"text": doc, "source": meta.get("source", "unknown")}
+            if "page" in meta:
+                candidate["page"] = meta["page"]
+            candidates.append(candidate)
 
         return self.reranker.rerank(question, candidates, top_n=top_n)
 

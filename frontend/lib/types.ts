@@ -23,8 +23,10 @@ export interface UploadResponse {
 }
 
 export interface Source {
+  n?: number;
   source: string;
   score: number;
+  page?: number;
 }
 
 export interface AskResponse {
