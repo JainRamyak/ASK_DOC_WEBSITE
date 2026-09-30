@@ -19,7 +19,12 @@ from starlette.concurrency import run_in_threadpool
 
 from config import settings
 from logger import setup_logging
-from src.generation.answer_chain import LLMConfigError, check_llm_config
+from src.generation.answer_chain import (
+    LLMConfigError,
+    LLMOverloadedError,
+    LLMRateLimitError,
+    check_llm_config,
+)
 from src.ingestion.loader import NO_TEXT, UNREADABLE
 from src.ingestion.web_loader import URLValidationError
 from src.pipeline import AskMyDocsPipeline
@@ -110,6 +115,14 @@ SKIP_MESSAGES = {
 # Shared verbatim across routes per docs/DECISIONS.md (G13).
 GENERIC_ERROR_MESSAGE = "Something went wrong while processing your request. Please try again."
 CONFIG_ERROR_MESSAGE = "The assistant is temporarily unavailable. Please try again later."
+
+# G29: provider throttling (429) / overload (503, 529) on /query. Fixed
+# strings, distinct from CONFIG_ERROR_MESSAGE — never str(e).
+RATE_LIMIT_ERROR_MESSAGE = (
+    "The assistant is receiving too many requests right now. "
+    "Please wait a moment and try again."
+)
+BUSY_ERROR_MESSAGE = "The assistant is busy right now. Please try again in a moment."
 
 # G14: fixed, safe string for /ready — never str(e), the invalid
 # provider name, or any part of a key.
@@ -330,6 +343,12 @@ async def query_document(request: QueryRequest):
     except LLMConfigError:
         logger.exception("Query failed")
         raise HTTPException(status_code=503, detail=CONFIG_ERROR_MESSAGE)
+    except LLMRateLimitError:
+        logger.exception("Query failed")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_ERROR_MESSAGE)
+    except LLMOverloadedError:
+        logger.exception("Query failed")
+        raise HTTPException(status_code=503, detail=BUSY_ERROR_MESSAGE)
     except Exception:
         logger.exception("Query failed")
         raise HTTPException(status_code=500, detail=GENERIC_ERROR_MESSAGE)
