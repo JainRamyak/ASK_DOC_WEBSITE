@@ -27,6 +27,18 @@ class LLMConfigError(Exception):
     verbatim."""
 
 
+class LLMRateLimitError(Exception):
+    """The provider rejected the answer call with HTTP 429. Raised by
+    answer(); caught by /query in api/main.py and mapped to a 429 with a
+    fixed message — never shown to the client verbatim."""
+
+
+class LLMOverloadedError(Exception):
+    """The provider rejected the answer call with HTTP 503 or 529
+    (overloaded). Raised by answer(); caught by /query in api/main.py and
+    mapped to a 503 with a fixed message — never shown verbatim."""
+
+
 NOT_FOUND_MESSAGE = "I could not find this in the provided documents."
 
 SYSTEM_PROMPT = f"""You are a precise document assistant.
@@ -106,7 +118,29 @@ def answer(question: str, chunks: List[dict]) -> dict:
             f"Unknown LLM_PROVIDER='{provider}' in .env. Valid: {list(dispatch)}"
         )
 
-    return dispatch[provider](question, context, chunks)
+    try:
+        return dispatch[provider](question, context, chunks)
+    except LLMConfigError:
+        raise
+    except Exception as e:
+        status = _provider_status(e)
+        if status == 429:
+            raise LLMRateLimitError(f"{provider} rate limited (429)") from e
+        if status in (503, 529):
+            raise LLMOverloadedError(f"{provider} overloaded ({status})") from e
+        raise
+
+
+def _provider_status(e: Exception) -> Optional[int]:
+    """HTTP status carried by a provider SDK exception, or None. Duck-typed
+    so no SDK has to be imported: mistral/openai/anthropic expose
+    `status_code`, google-genai exposes `code`. Only a real int counts
+    (bool is an int subclass, so it is excluded explicitly)."""
+    for attr in ("status_code", "code"):
+        value = getattr(e, attr, None)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return None
 
 
 def check_llm_config() -> None:
